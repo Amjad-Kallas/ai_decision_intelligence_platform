@@ -1,0 +1,52 @@
+# Ground-truth questions against the demo repo (Simple-AI-Agent-for-Machine-Learning).
+# type: graph | semantic | no_answer
+#   graph      - answer should reflect actual import/dependent relationships
+#   semantic   - answer should be grounded in a specific retrieved function/class
+#   no_answer  - nothing in the repo answers this; the model should say so, not hallucinate
+#
+# expected_evidence: substrings checked against retrieved chunks' node_id/file_path (any match passes)
+# expected_keywords: substrings that must ALL appear (case-insensitive) in the final answer
+
+- id: dep-utils
+  question: "Which files depend on utils.py?"
+  type: graph
+  expected_evidence: ["utils.py"]
+  expected_keywords: ["main.py", "streamlit_app.py"]
+
+- id: dep-main-imports
+  question: "What does main.py depend on?"
+  type: graph
+  expected_evidence: ["main.py"]
+  expected_keywords: ["utils.py"]
+
+- id: impact-plot
+  question: "What could be affected if I change plot.py?"
+  type: graph
+  expected_evidence: ["plot.py"]
+  expected_keywords: ["main.py", "streamlit_app.py"]
+
+- id: explain-llama-function
+  question: "What does interpret_plot_command_with_llama do?"
+  type: semantic
+  expected_evidence: ["naturalLanguage.py::interpret_plot_command_with_llama"]
+  expected_keywords: ["llama"]
+
+- id: explain-load-data
+  question: "Where is data loaded from a CSV file?"
+  type: semantic
+  expected_evidence: ["utils.py::load_data"]
+  expected_keywords: ["load_data"]
+
+- id: compare-models
+  question: "What is the difference between train_svm and train_logistic_regression_sklearn?"
+  type: semantic
+  expected_evidence: ["model.py::train_svm", "model.py::train_logistic_regression_sklearn"]
+  expected_keywords: ["svm", "logistic"]
+
+- id: no-auth
+  question: "How does this project handle user authentication and login?"
+  type: no_answer
+
+- id: no-database
+  question: "Where does this project connect to a PostgreSQL database?"
+  type: no_answer

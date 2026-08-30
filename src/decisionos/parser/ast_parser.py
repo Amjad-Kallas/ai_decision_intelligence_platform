@@ -35,11 +35,37 @@ def _resolve_import_target(module_name: str, module_to_file: dict[str, str]) -> 
     return None
 
 
+def _package_context(module_name: str, is_package: bool) -> str:
+    """The package that a single leading dot ('.', level=1) refers to for this module."""
+    if is_package:
+        return module_name
+    parts = module_name.split(".")
+    return ".".join(parts[:-1])
+
+
+def _resolve_relative_import(
+    current_module: str, is_package: bool, module: str | None, level: int, names: list[str]
+) -> list[str]:
+    """Turn a `from .foo import x` / `from . import x` statement into candidate dotted module names."""
+    base_parts = _package_context(current_module, is_package).split(".") if current_module else []
+    strip = level - 1
+    if strip > len(base_parts):
+        return []
+    target_package = ".".join(base_parts[: len(base_parts) - strip] if strip else base_parts)
+
+    if module:
+        return [f"{target_package}.{module}" if target_package else module]
+
+    # `from . import x, y` — each name may itself be a sibling submodule.
+    return [f"{target_package}.{name}" if target_package else name for name in names]
+
+
 class _FileVisitor(ast.NodeVisitor):
     def __init__(self, rel_path: str) -> None:
         self.rel_path = rel_path
         self.nodes: list[Node] = []
         self.imported_modules: list[str] = []
+        self.relative_imports: list[tuple[str | None, int, list[str]]] = []
         self._class_stack: list[str] = []
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
@@ -85,9 +111,12 @@ class _FileVisitor(ast.NodeVisitor):
             self.imported_modules.append(alias.name)
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
-        # Relative imports (level > 0) are skipped for V1 simplicity.
-        if node.module and node.level == 0:
-            self.imported_modules.append(node.module)
+        if node.level == 0:
+            if node.module:
+                self.imported_modules.append(node.module)
+        else:
+            names = [alias.name for alias in node.names]
+            self.relative_imports.append((node.module, node.level, names))
 
 
 def parse_repository(repo_root: Path) -> tuple[list[Node], list[Edge]]:
@@ -96,6 +125,7 @@ def parse_repository(repo_root: Path) -> tuple[list[Node], list[Edge]]:
 
     file_rel_paths: dict[Path, str] = {f: f.relative_to(repo_root).as_posix() for f in py_files}
     module_to_file: dict[str, str] = {_module_name_for_file(repo_root, f): rel for f, rel in file_rel_paths.items()}
+    file_to_module: dict[str, str] = {rel: module for module, rel in module_to_file.items()}
 
     nodes: list[Node] = []
     edges: list[Edge] = []
@@ -114,8 +144,15 @@ def parse_repository(repo_root: Path) -> tuple[list[Node], list[Edge]]:
         visitor.visit(tree)
         nodes.extend(visitor.nodes)
 
+        candidate_modules = list(visitor.imported_modules)
+
+        current_module = file_to_module.get(rel, "")
+        is_package = f.name == "__init__.py"
+        for module, level, names in visitor.relative_imports:
+            candidate_modules.extend(_resolve_relative_import(current_module, is_package, module, level, names))
+
         seen_targets: set[str] = set()
-        for module_name in visitor.imported_modules:
+        for module_name in candidate_modules:
             target = _resolve_import_target(module_name, module_to_file)
             if target and target != rel and target not in seen_targets:
                 edges.append(Edge(src=rel, dst=target, type="imports"))

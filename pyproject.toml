@@ -7,6 +7,10 @@ dependencies = [
     "duckdb>=1.0.0",
     "networkx>=3.3",
     "python-dotenv>=1.0.1",
+    "numpy>=1.26",
+    "ollama>=0.3.0",
+    "streamlit>=1.38",
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
