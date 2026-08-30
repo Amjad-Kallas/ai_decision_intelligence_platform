@@ -5,7 +5,7 @@ import re
 import ollama
 
 from .. import config
-from ..graph.code_graph import dependencies_of, dependents_of, load_import_graph
+from ..graph.code_graph import callees_of, callers_of, dependencies_of, dependents_of, load_call_graph, load_import_graph
 from ..rag.vector_store import search
 
 FILE_MENTION_RE = re.compile(r"[\w\-/]+\.py\b")
@@ -17,8 +17,11 @@ SYSTEM_PROMPT = (
     "'Dependency info' section is provided, treat the files it lists under 'imported by' as the "
     "direct answer to any question about what depends on, imports, or would be affected by "
     "changing that file — name those files explicitly, don't just discuss the affected code in "
-    "the abstract. If the evidence doesn't contain enough information to answer confidently, say "
-    "so instead of guessing."
+    "the abstract. If a 'Call graph info' section is provided, treat the functions listed under "
+    "'called by' as the direct answer to any question about what calls, uses, or invokes that "
+    "function, and the functions listed under 'calls' as the direct answer to what that function "
+    "calls — name them explicitly. If the evidence doesn't contain enough information to answer "
+    "confidently, say so instead of guessing."
 )
 
 
@@ -37,6 +40,16 @@ def _format_graph_context(file_path: str, graph) -> str:
     )
 
 
+def _format_call_context(node_id: str, call_graph) -> str:
+    calls = callees_of(call_graph, node_id)
+    called_by = callers_of(call_graph, node_id)
+    return (
+        f"Call graph info for {node_id}:\n"
+        f"  calls (directly or transitively): {', '.join(calls) if calls else 'none'}\n"
+        f"  called by (directly or transitively): {', '.join(called_by) if called_by else 'none'}"
+    )
+
+
 def _resolve_context_file(question: str, graph, chunks: list[dict]) -> str | None:
     """Prefer a file the question explicitly names (if it's actually in the graph) over the top search hit."""
     for match in FILE_MENTION_RE.findall(question):
@@ -45,14 +58,44 @@ def _resolve_context_file(question: str, graph, chunks: list[dict]) -> str | Non
     return chunks[0]["file_path"] if chunks else None
 
 
+def _resolve_context_node(question: str, call_graph, chunks: list[dict]) -> str | None:
+    """Prefer a function/class the question names explicitly over the top search hit.
+
+    Semantic search can rank a function that merely *mentions* the named target (e.g.
+    load_cached_data, which calls load_data) above the target itself, since both are
+    topically similar. An exact identifier match in the question is a stronger signal.
+    """
+    name_to_ids: dict[str, list[str]] = {}
+    for node_id, data in call_graph.nodes(data=True):
+        name_to_ids.setdefault(data.get("name", ""), []).append(node_id)
+
+    evidence_ids = {c["node_id"] for c in chunks}
+    for word in re.findall(r"\w+", question):
+        candidates = name_to_ids.get(word)
+        if not candidates:
+            continue
+        return next((n for n in candidates if n in evidence_ids), candidates[0])
+
+    return chunks[0]["node_id"] if chunks else None
+
+
 def answer_question(question: str, top_k: int = 5) -> dict:
     chunks = search(question, top_k=top_k)
     graph = load_import_graph()
+    call_graph = load_call_graph()
 
     context_file = _resolve_context_file(question, graph, chunks)
     graph_context = _format_graph_context(context_file, graph) if context_file else ""
 
-    prompt = f"Question: {question}\n\nCode evidence:\n{_format_evidence(chunks)}\n\n{graph_context}\n"
+    context_node = _resolve_context_node(question, call_graph, chunks)
+    call_context = _format_call_context(context_node, call_graph) if context_node and context_node in call_graph else ""
+
+    prompt = (
+        f"Question: {question}\n\n"
+        f"Code evidence:\n{_format_evidence(chunks)}\n\n"
+        f"{graph_context}\n\n"
+        f"{call_context}\n"
+    )
 
     response = ollama.chat(
         model=config.OLLAMA_MODEL,
@@ -67,4 +110,5 @@ def answer_question(question: str, top_k: int = 5) -> dict:
         "answer": response["message"]["content"],
         "evidence": chunks,
         "graph_context": graph_context,
+        "call_context": call_context,
     }

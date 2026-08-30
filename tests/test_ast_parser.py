@@ -27,3 +27,14 @@ def test_parse_repository_resolves_relative_imports():
     assert ("pkg/sub/c.py", "pkg/a.py") in import_edges
     # `from .c import use_a` in pkg/sub/d.py -> pkg/sub/c.py
     assert ("pkg/sub/d.py", "pkg/sub/c.py") in import_edges
+
+
+def test_parse_repository_resolves_call_edges():
+    repo_root = Path(__file__).parent / "fixtures" / "sample_repo"
+    _, edges = parse_repository(repo_root)
+
+    call_edges = [(e.src, e.dst) for e in edges if e.type == "calls"]
+    assert ("pkg/e.py::caller_same_file", "pkg/e.py::helper") in call_edges
+    assert ("pkg/e.py::caller_from_import", "pkg/a.py::foo") in call_edges
+    assert ("pkg/e.py::caller_module_qualified", "pkg/b.py::use_foo") in call_edges
+    assert ("pkg/e.py::Greeter.greet", "pkg/e.py::Greeter.build_message") in call_edges

@@ -25,6 +25,10 @@ if ask and question:
         st.subheader("Dependency context")
         st.code(result["graph_context"], language="text")
 
+    if result["call_context"]:
+        st.subheader("Call graph context")
+        st.code(result["call_context"], language="text")
+
     st.subheader("Evidence")
     for chunk in result["evidence"]:
         with st.expander(f"{chunk['node_id']}  (similarity {chunk['score']:.2f})"):
