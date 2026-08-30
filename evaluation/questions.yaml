@@ -43,6 +43,18 @@
   expected_evidence: ["model.py::train_svm", "model.py::train_logistic_regression_sklearn"]
   expected_keywords: ["svm", "logistic"]
 
+- id: callers-load-data
+  question: "What calls load_data?"
+  type: graph
+  expected_evidence: ["load_data"]
+  expected_keywords: ["load_cached_data"]
+
+- id: callees-llama-interpret
+  question: "What does interpret_plot_command_with_llama call?"
+  type: semantic
+  expected_evidence: ["interpret_plot_command_with_llama"]
+  expected_keywords: ["interpret_plot_command"]
+
 - id: no-auth
   question: "How does this project handle user authentication and login?"
   type: no_answer
