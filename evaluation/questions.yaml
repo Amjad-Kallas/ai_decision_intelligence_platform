@@ -7,58 +7,61 @@
 # expected_evidence: substrings checked against retrieved chunks' node_id/file_path (any match passes)
 # expected_keywords: substrings that must ALL appear (case-insensitive) in the final answer
 
-- id: dep-utils
-  question: "Which files depend on utils.py?"
-  type: graph
-  expected_evidence: ["utils.py"]
-  expected_keywords: ["main.py", "streamlit_app.py"]
+repo: Simple-AI-Agent-for-Machine-Learning
 
-- id: dep-main-imports
-  question: "What does main.py depend on?"
-  type: graph
-  expected_evidence: ["main.py"]
-  expected_keywords: ["utils.py"]
+questions:
+  - id: dep-utils
+    question: "Which files depend on utils.py?"
+    type: graph
+    expected_evidence: ["utils.py"]
+    expected_keywords: ["main.py", "streamlit_app.py"]
 
-- id: impact-plot
-  question: "What could be affected if I change plot.py?"
-  type: graph
-  expected_evidence: ["plot.py"]
-  expected_keywords: ["main.py", "streamlit_app.py"]
+  - id: dep-main-imports
+    question: "What does main.py depend on?"
+    type: graph
+    expected_evidence: ["main.py"]
+    expected_keywords: ["utils.py"]
 
-- id: explain-llama-function
-  question: "What does interpret_plot_command_with_llama do?"
-  type: semantic
-  expected_evidence: ["naturalLanguage.py::interpret_plot_command_with_llama"]
-  expected_keywords: ["llama"]
+  - id: impact-plot
+    question: "What could be affected if I change plot.py?"
+    type: graph
+    expected_evidence: ["plot.py"]
+    expected_keywords: ["main.py", "streamlit_app.py"]
 
-- id: explain-load-data
-  question: "Where is data loaded from a CSV file?"
-  type: semantic
-  expected_evidence: ["utils.py::load_data"]
-  expected_keywords: ["load_data"]
+  - id: explain-llama-function
+    question: "What does interpret_plot_command_with_llama do?"
+    type: semantic
+    expected_evidence: ["naturalLanguage.py::interpret_plot_command_with_llama"]
+    expected_keywords: ["llama"]
 
-- id: compare-models
-  question: "What is the difference between train_svm and train_logistic_regression_sklearn?"
-  type: semantic
-  expected_evidence: ["model.py::train_svm", "model.py::train_logistic_regression_sklearn"]
-  expected_keywords: ["svm", "logistic"]
+  - id: explain-load-data
+    question: "Where is data loaded from a CSV file?"
+    type: semantic
+    expected_evidence: ["utils.py::load_data"]
+    expected_keywords: ["load_data"]
 
-- id: callers-load-data
-  question: "What calls load_data?"
-  type: graph
-  expected_evidence: ["load_data"]
-  expected_keywords: ["load_cached_data"]
+  - id: compare-models
+    question: "What is the difference between train_svm and train_logistic_regression_sklearn?"
+    type: semantic
+    expected_evidence: ["model.py::train_svm", "model.py::train_logistic_regression_sklearn"]
+    expected_keywords: ["svm", "logistic"]
 
-- id: callees-llama-interpret
-  question: "What does interpret_plot_command_with_llama call?"
-  type: semantic
-  expected_evidence: ["interpret_plot_command_with_llama"]
-  expected_keywords: ["interpret_plot_command"]
+  - id: callers-load-data
+    question: "What calls load_data?"
+    type: graph
+    expected_evidence: ["load_data"]
+    expected_keywords: ["load_cached_data"]
 
-- id: no-auth
-  question: "How does this project handle user authentication and login?"
-  type: no_answer
+  - id: callees-llama-interpret
+    question: "What does interpret_plot_command_with_llama call?"
+    type: semantic
+    expected_evidence: ["interpret_plot_command_with_llama"]
+    expected_keywords: ["interpret_plot_command"]
 
-- id: no-database
-  question: "Where does this project connect to a PostgreSQL database?"
-  type: no_answer
+  - id: no-auth
+    question: "How does this project handle user authentication and login?"
+    type: no_answer
+
+  - id: no-database
+    question: "Where does this project connect to a PostgreSQL database?"
+    type: no_answer

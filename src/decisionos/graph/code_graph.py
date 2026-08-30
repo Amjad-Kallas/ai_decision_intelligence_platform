@@ -5,14 +5,18 @@ import networkx as nx
 from ..db.connection import get_connection
 
 
-def load_import_graph() -> nx.DiGraph:
+def load_import_graph(repo_id: str) -> nx.DiGraph:
     con = get_connection()
     graph: nx.DiGraph = nx.DiGraph()
 
-    for node_id, node_type, name in con.execute("SELECT id, type, name FROM nodes WHERE type = 'file'").fetchall():
+    for node_id, node_type, name in con.execute(
+        "SELECT id, type, name FROM nodes WHERE repo = ? AND type = 'file'", [repo_id]
+    ).fetchall():
         graph.add_node(node_id, type=node_type, name=name)
 
-    for src, dst in con.execute("SELECT src, dst FROM edges WHERE type = 'imports'").fetchall():
+    for src, dst in con.execute(
+        "SELECT src, dst FROM edges WHERE repo = ? AND type = 'imports'", [repo_id]
+    ).fetchall():
         graph.add_edge(src, dst)
 
     return graph
@@ -32,16 +36,16 @@ def dependencies_of(graph: nx.DiGraph, file_path: str) -> list[str]:
     return list(nx.descendants(graph, file_path))
 
 
-def load_call_graph() -> nx.DiGraph:
+def load_call_graph(repo_id: str) -> nx.DiGraph:
     con = get_connection()
     graph: nx.DiGraph = nx.DiGraph()
 
     for node_id, node_type, name in con.execute(
-        "SELECT id, type, name FROM nodes WHERE type IN ('function', 'class')"
+        "SELECT id, type, name FROM nodes WHERE repo = ? AND type IN ('function', 'class')", [repo_id]
     ).fetchall():
         graph.add_node(node_id, type=node_type, name=name)
 
-    for src, dst in con.execute("SELECT src, dst FROM edges WHERE type = 'calls'").fetchall():
+    for src, dst in con.execute("SELECT src, dst FROM edges WHERE repo = ? AND type = 'calls'", [repo_id]).fetchall():
         graph.add_edge(src, dst)
 
     return graph

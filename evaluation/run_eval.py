@@ -38,12 +38,14 @@ def _no_answer_match(answer: str) -> bool:
 
 
 def run() -> None:
-    questions = yaml.safe_load(QUESTIONS_PATH.read_text(encoding="utf-8"))
+    data = yaml.safe_load(QUESTIONS_PATH.read_text(encoding="utf-8"))
+    repo_id = data["repo"]
+    questions = data["questions"]
 
     results = []
     for q in questions:
         start = time.perf_counter()
-        result = answer_question(q["question"])
+        result = answer_question(q["question"], repo_id)
         latency = time.perf_counter() - start
 
         checks: dict[str, bool] = {}

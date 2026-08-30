@@ -14,12 +14,19 @@ def _repo_name_from_url(url: str) -> str:
     return name[:-4] if name.endswith(".git") else name
 
 
+def derive_repo_id(source: str) -> str:
+    """Stable identifier used to tag stored rows, so multiple repos' code maps can coexist."""
+    if URL_RE.match(source):
+        return _repo_name_from_url(source)
+    return Path(source).resolve().name
+
+
 def resolve_repo_source(source: str) -> Path:
     """Accepts a local path or a git URL. URLs are cloned (or updated, if already cloned) under repos/."""
     if not URL_RE.match(source):
         return Path(source)
 
-    dest = config.PROJECT_ROOT / "repos" / _repo_name_from_url(source)
+    dest = config.PROJECT_ROOT / "repos" / derive_repo_id(source)
     if dest.exists():
         subprocess.run(["git", "-C", str(dest), "pull", "--ff-only"], check=True)
     else:

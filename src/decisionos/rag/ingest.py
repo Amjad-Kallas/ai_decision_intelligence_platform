@@ -29,15 +29,17 @@ def _build_chunk_text(node_type: str, name: str, file_path: str, docstring: str 
     return "\n\n".join(parts)
 
 
-def ingest_repository(repo_root: Path) -> int:
+def ingest_repository(repo_root: Path, repo_id: str) -> int:
     """Embed every function/class node into `code_chunks`. Requires build_codemap.py to have run first."""
     repo_root = repo_root.resolve()
     con = get_connection()
     init_schema(con)
-    con.execute("DELETE FROM code_chunks")
+    con.execute("DELETE FROM code_chunks WHERE repo = ?", [repo_id])
 
     rows = con.execute(
-        "SELECT id, type, name, file_path, lineno, end_lineno, docstring FROM nodes WHERE type IN ('function', 'class')"
+        "SELECT id, type, name, file_path, lineno, end_lineno, docstring FROM nodes "
+        "WHERE repo = ? AND type IN ('function', 'class')",
+        [repo_id],
     ).fetchall()
 
     file_lines_cache: dict[str, list[str]] = {}
@@ -53,7 +55,7 @@ def ingest_repository(repo_root: Path) -> int:
 
         text = _build_chunk_text(node_type, name, file_path, docstring, source)
         embedding = embed(text)
-        con.execute("INSERT INTO code_chunks VALUES (?, ?, ?, ?)", (node_id, file_path, text, embedding))
+        con.execute("INSERT INTO code_chunks VALUES (?, ?, ?, ?, ?)", (repo_id, node_id, file_path, text, embedding))
         count += 1
 
     return count

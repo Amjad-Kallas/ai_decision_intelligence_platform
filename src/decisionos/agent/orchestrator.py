@@ -79,10 +79,10 @@ def _resolve_context_node(question: str, call_graph, chunks: list[dict]) -> str 
     return chunks[0]["node_id"] if chunks else None
 
 
-def answer_question(question: str, top_k: int = 5) -> dict:
-    chunks = search(question, top_k=top_k)
-    graph = load_import_graph()
-    call_graph = load_call_graph()
+def answer_question(question: str, repo_id: str, top_k: int = 5) -> dict:
+    chunks = search(question, repo_id, top_k=top_k)
+    graph = load_import_graph(repo_id)
+    call_graph = load_call_graph(repo_id)
 
     context_file = _resolve_context_file(question, graph, chunks)
     graph_context = _format_graph_context(context_file, graph) if context_file else ""
@@ -103,7 +103,7 @@ def answer_question(question: str, top_k: int = 5) -> dict:
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": prompt},
         ],
-        options={"num_ctx": 8192},
+        options={"num_ctx": 8192, "temperature": 0.4},  # default is 0.8; lower reduces run-to-run answer variance
     )
 
     return {
