@@ -66,7 +66,11 @@ class _FileVisitor(ast.NodeVisitor):
         self.nodes: list[Node] = []
         self.imported_modules: list[str] = []
         self.relative_imports: list[tuple[str | None, int, list[str]]] = []
+        self.import_aliases: dict[str, str] = {}
+        self.from_import_aliases: dict[str, tuple[str, str]] = {}
+        self.calls: list[tuple[str, ast.Call]] = []
         self._class_stack: list[str] = []
+        self._function_stack: list[str] = []
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
         qualname = _qualname(self._class_stack, node.name)
@@ -104,19 +108,78 @@ class _FileVisitor(ast.NodeVisitor):
                 docstring=ast.get_docstring(node),
             )
         )
+        self._function_stack.append(qualname)
         self.generic_visit(node)
+        self._function_stack.pop()
 
     def visit_Import(self, node: ast.Import) -> None:
         for alias in node.names:
             self.imported_modules.append(alias.name)
+            self.import_aliases[alias.asname or alias.name] = alias.name
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         if node.level == 0:
             if node.module:
                 self.imported_modules.append(node.module)
+                for alias in node.names:
+                    self.from_import_aliases[alias.asname or alias.name] = (node.module, alias.name)
         else:
             names = [alias.name for alias in node.names]
             self.relative_imports.append((node.module, node.level, names))
+
+    def visit_Call(self, node: ast.Call) -> None:
+        caller_id = f"{self.rel_path}::{self._function_stack[-1]}" if self._function_stack else self.rel_path
+        self.calls.append((caller_id, node))
+        self.generic_visit(node)
+
+
+def _resolve_call_target(
+    caller_id: str,
+    caller_file: str,
+    func_expr: ast.expr,
+    import_aliases: dict[str, str],
+    from_import_aliases: dict[str, tuple[str, str]],
+    module_to_file: dict[str, str],
+    all_node_ids: set[str],
+) -> str | None:
+    """Best-effort resolution for a subset of call shapes: bare names, self.method(), module.func()."""
+    if isinstance(func_expr, ast.Name):
+        name = func_expr.id
+
+        candidate = f"{caller_file}::{name}"
+        if candidate in all_node_ids:
+            return candidate
+
+        if name in from_import_aliases:
+            module, orig_name = from_import_aliases[name]
+            target_file = _resolve_import_target(module, module_to_file)
+            if target_file:
+                candidate = f"{target_file}::{orig_name}"
+                if candidate in all_node_ids:
+                    return candidate
+        return None
+
+    if isinstance(func_expr, ast.Attribute) and isinstance(func_expr.value, ast.Name):
+        obj_name, attr_name = func_expr.value.id, func_expr.attr
+
+        if obj_name == "self":
+            _, _, qualname = caller_id.partition("::")
+            if "." in qualname:
+                class_name = qualname.rsplit(".", 1)[0]
+                candidate = f"{caller_file}::{class_name}.{attr_name}"
+                if candidate in all_node_ids:
+                    return candidate
+            return None
+
+        if obj_name in import_aliases:
+            target_file = _resolve_import_target(import_aliases[obj_name], module_to_file)
+            if target_file:
+                candidate = f"{target_file}::{attr_name}"
+                if candidate in all_node_ids:
+                    return candidate
+        return None
+
+    return None
 
 
 def parse_repository(repo_root: Path) -> tuple[list[Node], list[Edge]]:
@@ -129,6 +192,7 @@ def parse_repository(repo_root: Path) -> tuple[list[Node], list[Edge]]:
 
     nodes: list[Node] = []
     edges: list[Edge] = []
+    file_visitors: dict[str, _FileVisitor] = {}
 
     for f in py_files:
         rel = file_rel_paths[f]
@@ -143,6 +207,7 @@ def parse_repository(repo_root: Path) -> tuple[list[Node], list[Edge]]:
         visitor = _FileVisitor(rel)
         visitor.visit(tree)
         nodes.extend(visitor.nodes)
+        file_visitors[rel] = visitor
 
         candidate_modules = list(visitor.imported_modules)
 
@@ -157,5 +222,18 @@ def parse_repository(repo_root: Path) -> tuple[list[Node], list[Edge]]:
             if target and target != rel and target not in seen_targets:
                 edges.append(Edge(src=rel, dst=target, type="imports"))
                 seen_targets.add(target)
+
+    # Call edges are resolved after every file's nodes are known, since a call can target
+    # a function defined in a file that hasn't been visited yet.
+    all_node_ids = {n.id for n in nodes}
+    seen_calls: set[tuple[str, str]] = set()
+    for rel, visitor in file_visitors.items():
+        for caller_id, call_node in visitor.calls:
+            target = _resolve_call_target(
+                caller_id, rel, call_node.func, visitor.import_aliases, visitor.from_import_aliases, module_to_file, all_node_ids
+            )
+            if target and target != caller_id and (caller_id, target) not in seen_calls:
+                edges.append(Edge(src=caller_id, dst=target, type="calls"))
+                seen_calls.add((caller_id, target))
 
     return nodes, edges
